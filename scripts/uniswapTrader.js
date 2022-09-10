@@ -1,8 +1,9 @@
-const { ethers } = require('ethers')
+const hre = require("hardhat");
 const { abi: IUniswapV3PoolABI } = require('@uniswap/v3-core/artifacts/contracts/interfaces/IUniswapV3Pool.sol/IUniswapV3Pool.json')
 const { abi: SwapRouterABI} = require('@uniswap/v3-periphery/artifacts/contracts/interfaces/ISwapRouter.sol/ISwapRouter.json')
 const { getPoolImmutables, getPoolState } = require('./helpers')
 const ERC20ABI = require('./abi.json')
+const { ethers } = require("hardhat");
 
 require('dotenv').config()
 const INFURA_URL_TESTNET = process.env.INFURA_URL_TESTNET
@@ -23,28 +24,48 @@ const symbol1 = 'UNI'
 const decimals1 = 18
 const address1 = '0xaD6D458402F60fD3Bd25163575031ACDce07538D'
 
-
-
 async function main() {
+
+  const [deployer] = await ethers.getSigners();
+
+  // console.log("Deploying contracts with the account:", deployer.address);
+
+  // console.log("Account balance:", (await deployer.getBalance()).toString());
+
+
+  const Swap = await hre.ethers.getContractFactory("Token");
+  const swap = await Swap.deploy();
+
+  // console.log("Token address:", swap.address);
+  // console.log("The total supply is",await swap.totalSupply())
+
   const poolContract = new ethers.Contract(
     poolAddress,
     IUniswapV3PoolABI,
     provider
   )
-
-  const immutables = await getPoolImmutables(poolContract)
-  const state = await getPoolState(poolContract)
-
-  const wallet = new ethers.Wallet(WALLET_SECRET)
-  const connectedWallet = wallet.connect(provider)
-
+  
   const swapRouterContract = new ethers.Contract(
     swapRouterAddress,
     SwapRouterABI,
     provider
   )
 
-  const inputAmount = 0.001
+  const tokenContract0 = new ethers.Contract(
+    address0,
+    ERC20ABI,
+    provider
+  )
+
+  const immutables = await getPoolImmutables(poolContract)
+
+  // const state = await getPoolState(poolContract)
+  
+  // console.log("state is", state)
+
+  const connectedWallet = new ethers.Wallet(WALLET_SECRET).connect(provider)
+
+  const inputAmount = 0.01
 
   const amountIn = ethers.utils.parseUnits(
     inputAmount.toString(),
@@ -53,20 +74,16 @@ async function main() {
 
   const approvalAmount = BigInt(amountIn * 100000).toString()
 
-  const tokenContract0 = new ethers.Contract(
-    address0,
-    ERC20ABI,
-    provider
-  )
-
-  const approvalResponse = await tokenContract0.connect(connectedWallet).approve(
+  const approvalResponse = await tokenContract0.connect(connectedWallet)
+  
+  await swap.approve(
     swapRouterAddress,
     approvalAmount
   )
 
   const params = {
-    tokenIn: immutables.token0,
-    tokenOut: immutables.token1,
+    tokenIn: immutables.token1,
+    tokenOut: immutables.token0,
     fee: immutables.fee,
     recipient: WALLET_ADDRESS,
     deadline: Math.floor(Date.now() / 1000) + (60 * 10),
@@ -85,4 +102,7 @@ async function main() {
   })
 }
 
-main()
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
